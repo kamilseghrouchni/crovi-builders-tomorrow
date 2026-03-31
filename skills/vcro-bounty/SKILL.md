@@ -1,30 +1,48 @@
 ---
 name: vcro-bounty
-description: "Bounty mode: user posts a budget and desired outcome, system acts as a procurement agent to find and acquire the optimal sample bundle. Two strictly sequential stages: (1) figure out what package makes sense, (2) act to acquire it. Use when a user has a budget and wants to know what they can buy and how to get it."
+description: "Bounty mode: user posts a budget and desired outcome, system acts as a procurement orchestrator across the full sample pipeline — sourcing, screening/QA, and assay. Coordinates sources (cohorts, hospitals, broker bypass, surplus trials, commissioned collection), CRO screening partners, and assay providers into a single budgeted plan. Two strictly sequential stages: (1) figure out what package makes sense across all three legs, (2) orchestrate acquisition."
 ---
 
 # vcro-bounty
 
-Procurement agent mode. The user posts a bounty — a budget plus a desired
-outcome. The system finds the optimal sample bundle and produces everything
-needed to acquire it.
+Sample procurement orchestration. The user posts a bounty — a budget plus
+a desired outcome. The system designs and coordinates the entire pipeline
+from sample collection to data delivery.
+
+## The three-leg pipeline
+
+Every bounty has three cost legs. Most researchers only price one.
+
+```
+Leg 1 — Source       Leg 2 — Screen/QA       Leg 3 — Assay
+─────────────────    ──────────────────────   ──────────────────
+Where samples        CRO validates quality    Platform runs the
+come from and        before committing        measurement and
+what they cost       budget to assay          delivers data
+```
+
+**The agent's job**: find the optimal provider for each leg, allocate
+the budget across all three, and coordinate the handoffs between them.
+A bundle is not just a sample source — it is a complete three-leg plan.
+
+The user sets the budget once. The agent decides how to split it.
 
 ## Philosophy
 
-The value is not in paperwork. Filling in a form the user could complete
-themselves in five minutes is not value. The agent earns its place when
-it computes something the user genuinely cannot do as well alone:
+The value is not in paperwork. The agent earns its place when it computes
+something the user genuinely cannot do as well alone:
 
-- Estimating prices when no rate card exists
-- Surfacing surplus inventory that is not advertised
-- Optimizing a bundle across sources with mixed price transparency
-- Crafting the right outreach angle from a PI's research framing
-- Flagging infeasibility early and proposing minimum viable relaxation
+- Designing the full three-leg stack, not just finding samples
+- Reverse-engineering broker supply networks from literature to find direct hospital sources
+- Identifying CROs that can screen the specific sample type for the specific assay
+- Allocating budget across legs to maximize scientific yield
+- Surfacing surplus inventory, commissioned collection, and bypass routes
+- Flagging infeasibility early with minimum viable relaxation
 
 **Two stages. They must never mix.**
-Stage 1: figure out what package makes sense.
-Stage 2: act to acquire it. Nothing from Stage 2 begins until the
-user has confirmed the bundle from Stage 1.
+Stage 1: figure out what three-leg package makes sense.
+Stage 2: orchestrate acquisition across all legs. Nothing from Stage 2
+begins until the user has confirmed the full plan from Stage 1.
 
 ## Model allocation
 
@@ -66,7 +84,7 @@ Classify every stated requirement:
 
 - `hard` — cannot change without breaking science or legal basis: commercial use required, specific biomarker assayed, minimum N for statistical power, specific regulatory consent scope
 - `soft` — can adapt with good reason and user agreement: sample type, geography, timeline, specific cohort, longitudinal vs cross-sectional
-- `budget` — treat as hard; allocate across components (samples / assay / overhead)
+- `budget` — treat as hard; allocate across the three legs (sourcing / screening+QA / assay). If the user only names a total, the agent proposes the allocation and flags it for confirmation. Default starting split: 30% sourcing / 15% screening+QA / 45% assay / 10% overhead — but this shifts significantly by indication and source type.
 - `implicit` — unstated but logically required from the use case:
   - want metabolomics → need non-hemolyzed plasma
   - want longitudinal → need ≥2 timepoints in the same subject
@@ -176,6 +194,36 @@ Some brokers hold samples from sources not in the literature at all — propriet
 
 ---
 
+#### Track C — CRO and screening provider discovery
+
+For Leg 2 (screen/QA), identify which CROs or service providers can validate sample quality before the assay budget is committed.
+
+**Why this leg matters**: committing Leg 3 (assay) budget before QA is the most common way bounties fail. A failed hemolysis check or low yield on 50% of samples after the assay is already running destroys the project. Leg 2 is insurance — it costs 5–15% of total budget and protects the other 85%.
+
+**What CRO screening covers** (match to the assay type):
+- Pre-analytical QC: hemolysis index, protein concentration, freeze-thaw cycle count, storage temperature log
+- Yield assessment: confirm sufficient volume/concentration for the intended assay
+- Matrix compatibility: confirm sample matrix is compatible with the assay platform (e.g. EDTA plasma vs. heparin plasma for NMR)
+- Pilot run: run 5–10 samples through the assay before full commitment
+
+**CRO discovery approach**:
+1. Search `vcro-source` artifacts (`provider_intelligence.json`) for CROs already identified in the pipeline run
+2. Search PubMed methods sections for CRO names cited alongside QC or pre-analytical validation steps in the target indication
+3. Web search: "[indication] sample QC CRO", "[assay type] pre-analytical validation service"
+4. Check whether the assay provider (Leg 3) offers integrated QC — Nightingale includes QC in their NMR workflow; Metabolon has a sample QC step; EMBL requires minimum sample volume/quality metrics before run
+
+**Cost estimates for Leg 2** (flag all as `estimated` — no published CRO QA rate cards in pricing-data.md):
+- Basic pre-analytical QC panel (hemolysis, protein, volume check): ~$5–20/sample estimated
+- Matrix compatibility + yield assessment: ~$15–40/sample estimated
+- Pilot assay run (5–10 samples): cost of mini-batch at assay provider, typically 20–30% above per-sample rate
+- Full QC + pilot: ~$25–60/sample estimated all-in
+
+These are estimates with no verified source — treat as planning ranges only. Always request formal quotes before committing.
+
+**Output from Track C**: list of (CRO/provider, services offered, compatibility with identified assay provider, estimated cost range, contact route)
+
+---
+
 #### Combined Phase 1 output
 
 Merge Track A and Track B into a single candidate list. Flag each source with:
@@ -195,14 +243,21 @@ For every candidate source, build a full cost-from-freezer-to-data estimate.
 
 Every line item must cite a specific entry in `references/pricing-data.md` (verified 2026-03-29). No invented ranges.
 
-**Component breakdown**:
+The cost stack has three legs. Build all three for every candidate bundle.
 
-1. **Sample acquisition**
+**Leg 1 — Sample acquisition**
    - If source is in pricing-data.md (ADNI, NACC, Lifelines, UK Biobank, NIA, EMBL, Baylor, Duke, Boston Core, USA Health): use the published or derived figure verbatim with its confidence tag
    - If source is an unknown hospital or core lab: find the nearest verified analogue in pricing-data.md by institution type, cite it explicitly: "No published pricing. Nearest verified analogue: Boston University Core (EUR 12–43/sample, published 2024). Official quote required to confirm."
    - If no analogue exists in pricing-data.md: `"sample_cost": "unknown — no comparable verified data. Official quote required."` — full stop, no number
 
-2. **Assay** — pricing-data.md only:
+**Leg 2 — Screening/QA (CRO)**
+From Track C findings. Flag all as `estimated` — no published CRO rate cards in pricing-data.md.
+- Basic QC (hemolysis, protein, volume): ~$5–20/sample estimated
+- Matrix compatibility + yield: ~$15–40/sample estimated
+- Pilot run at assay provider: mini-batch rate (20–30% above per-sample rate)
+- Always flag: "official quote required from [CRO name]"
+
+**Leg 3 — Assay** — pricing-data.md only:
    - Nightingale NMR: EUR 22–44 (derived from 2023 financials, confidence: derived)
    - Metabolon untargeted: EUR 800–1500 (estimated, confidence: low)
    - Biocrates kit-based: EUR 100–129 (historical kit price, confidence: estimated)
@@ -260,11 +315,30 @@ Produce exactly 3 bundle configurations. Always consider both Track A (cohorts) 
 - **Fastest to close** — shortest access timeline, within budget. Commercial broker or self-serve sources prioritized even if more expensive.
 - **Cheapest / bypass** — lowest per-sample cost using direct hospital routes identified in Track B, bypassing broker markup. Slower but maximizes budget headroom.
 
-For each bundle:
-- Source list with per-source: N, cost_stack summary, access route, timeline
-- Total known cost + unknown components
-- Scientific rationale ("this bundle gives you discovery + replication across two independent cohorts")
-- Harmonization risk if multi-site ("Hospital A used EDTA, Lifelines uses EDTA — compatible. Check tube type for source C before committing.")
+For each bundle, show the full three-leg pipeline plan:
+
+```
+BUNDLE [X] — [name]
+────────────────────────────────────────────────────
+LEG 1 · SOURCE       [provider], [N] samples, [access route]
+                     Cost: [low–high], [confidence], [basis]
+                     Timeline: [weeks to samples shipped]
+
+LEG 2 · SCREEN/QA   [CRO or assay provider QC], [services]
+                     Cost: [low–high], estimated (no published rate)
+                     Timeline: [weeks], runs in parallel with Leg 1 contracting
+
+LEG 3 · ASSAY        [platform], [N metabolites/biomarkers]
+                     Cost: [low–high], [confidence], [basis]
+                     Timeline: [weeks from sample receipt to data]
+
+TOTAL KNOWN:         [sum of known components]
+UNKNOWN COMPONENTS:  [list]
+HANDOFF SEQUENCE:    Leg 1 contract → ship to [CRO] → QC pass gate → ship to [assay] → data
+BUDGET ALLOCATION:   Leg1: X% / Leg2: Y% / Leg3: Z% / overhead: W%
+SCIENTIFIC RATIONALE: [what this bundle delivers and what it doesn't]
+────────────────────────────────────────────────────
+```
 
 Surface optimization signals:
 - **Volume threshold arbitrage**: "adding 20 samples crosses the 500-sample tier — per-sample cost drops EUR 34 → EUR 22, total savings EUR 240"
@@ -313,8 +387,14 @@ For each source in the confirmed bundle, classify where the agent adds value:
 - `self_serve` — direct link + what to specify in the order (Nightingale, Lifelines)
 - `portal_application` — direct link + 3-item checklist of what the user will need to have ready (ADNI, NACC, UK Biobank)
 
+The action map covers all three legs and their dependencies. Some actions must happen in sequence (cannot book assay until QC pass is confirmed). Surface this explicitly.
+
+```
+LEG 1 actions → must complete before LEG 2 ships → LEG 2 must pass before LEG 3 commits
+```
+
 **Output**: `store/runs/{run_id}/action_map.json`
-Per source: `{tier, action_type, agent_output, what_user_does_next, estimated_response_time}`
+Per provider across all three legs: `{leg, tier, action_type, depends_on, agent_output, what_user_does_next, estimated_response_time}`
 
 ### Phase 6 — Outreach angles (Sonnet subagent)
 
@@ -340,11 +420,11 @@ For every Tier 2 source in the action map, draft the intellectual content.
 Structured document that aggregates all of Stage 1 and gives the agent graded authority for Stage 2.
 
 Sections:
-1. **Bounty definition** — prize conditions, hard constraints, soft constraints, budget allocation
-2. **Bundle plan** — selected sources, cost stack summary, access routes, timelines, scientific rationale
-3. **Agent mandate** — what actions the agent is authorized to take, up to what budget threshold, what requires user escalation
-4. **Binding terms** — what confidentiality the agent may agree to on the user's behalf, no-commitment clauses, escalation conditions (when agent stops and asks before proceeding)
-5. **Action log** — what was sent, to whom, when (populated as actions execute)
+1. **Bounty definition** — prize conditions, hard constraints, soft constraints, budget allocation across three legs
+2. **Pipeline plan** — full three-leg stack: source provider + CRO + assay platform, with handoff sequence, costs, and timelines
+3. **Agent mandate** — what actions the agent is authorized to take at each leg, up to what budget threshold, what requires user escalation before proceeding
+4. **Binding terms** — what confidentiality the agent may agree to on the user's behalf, no-commitment clauses, QC pass/fail gates (if Leg 2 fails, agent stops and reports before committing Leg 3 budget)
+5. **Action log** — what was sent, to whom, when — per leg (populated as actions execute)
 
 Format: structure and language should look like a standard CDA/MTA preamble. Counterparties (biobanks, PIs, CROs) recognize this format — it signals a serious, well-organized buyer.
 
