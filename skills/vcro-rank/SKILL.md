@@ -71,26 +71,33 @@ population signals, not targeted pathway discovery.
 
 ### Step 4 — Write output
 
-`ranking.json`:
+`ranking.json` — **MUST be a JSON array at the top level.** Not a dict.
+Not wrapped in `{"ranked_cohorts": [...]}`. A plain array.
+
 ```json
-{
-  "ranked_cohorts": [
-    {
-      "rank": 1,
-      "id": "PMC12269576",
-      "cohort_name": "ADNI",
-      "why": "Best match. Longitudinal LC/MS plasma, n=985 usable, proven signal, public access.",
-      "fit_factors": {
-        "sample_match": "exact (plasma, LC/MS)",
-        "design_match": "exact (longitudinal, conversion tracking)",
-        "usable_n": 985,
-        "access": "public portal",
-        "evidence": "replicated in ASPREE"
-      }
+[
+  {
+    "rank": 1,
+    "id": "PMC12269576",
+    "cohort_name": "ADNI",
+    "diseases": ["AD"],
+    "sample_types": ["plasma"],
+    "why": "Best match. Longitudinal LC/MS plasma, n=985 usable, proven signal, public access.",
+    "fit_factors": {
+      "sample_match": "exact (plasma, LC/MS)",
+      "design_match": "exact (longitudinal, conversion tracking)",
+      "usable_n": 985,
+      "access": "public portal",
+      "evidence": "replicated in ASPREE",
+      "commercial_use": "confirmed"
     }
-  ]
-}
+  }
+]
 ```
+
+Every ranked cohort MUST include: `rank`, `id`, `cohort_name`,
+`diseases`, `sample_types`, `why`, `fit_factors`. The `fit_factors`
+MUST include `commercial_use` if the user requires commercial access.
 
 ## Critical rules
 

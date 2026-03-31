@@ -108,10 +108,15 @@ Narrowing down now. Give me a couple more minutes."
 
 ### Phase 2.5 — Validate
 
-Spawn one or more **Sonnet subagents** (batch 30 max each):
-- Classify each result as RELEVANT / NOT_RELEVANT / TANGENTIAL
-- Write `{run_dir}/validation_results.json`
-- Return digest: counts + tangential themes formatted as a ready-to-send
+Spawn **one Sonnet subagent** immediately after receiving the search
+digest. Do not re-read skills or deliberate — the gap between search
+and validate must be seconds, not minutes.
+
+The subagent:
+- Classifies each result as RELEVANT / NOT_RELEVANT / TANGENTIAL
+- Writes `{run_dir}/validation_results.json`
+- Appends findings to `{run_dir}/progress.jsonl` as it works
+- Returns digest: counts + tangential themes formatted as a ready-to-send
   user question (so Opus can send it verbatim)
 
 Main session receives digest. `complete validate`
@@ -120,14 +125,9 @@ If tangential items exist, Opus sends the pre-formatted question to the
 user. Waits for response. Records decision. `complete tangential` or
 `skip tangential "user chose strict"`.
 
-Template (comes from subagent digest):
-"X cohorts directly match your request.
-
-I also found Y cohorts that are close but not exact:
-- [Theme 1]: N cohorts. Example: [name]
-- [Theme 2]: N cohorts. Example: [name]
-
-Should I include these, or keep it strictly to [indication]?"
+Model: **single Sonnet subagent**. Split into parallel batches ONLY
+if >150 results. The 12-minute gap in the first run was orchestration
+delay, not classification time.
 
 ### Phase 3 — PMID mapping + section fetch
 
@@ -140,17 +140,24 @@ Spawn a **Haiku subagent**:
 
 ### Phase 4 — Extract (scope-driven, BATCHED)
 
-1. Split relevant papers into batches of 8–10
-2. Spawn 2–3 **Sonnet subagents** in parallel
-3. Each subagent:
+Spawn a **Haiku coordinator subagent** that handles the entire
+extraction phase. The coordinator:
+
+1. Reads `{run_dir}/validation_results.json` to get the relevant paper list
+2. Splits papers into batches of 8–10
+3. Spawns 2–3 **Sonnet extraction subagents** in parallel
+4. Each Sonnet subagent:
    - Reads vcro-cohort-map Phase B
    - Receives scope_notes and path to intelligence-dimensions.md
    - Writes output to `{run_dir}/extracted_cohorts_{batch_n}.json`
-   - Returns digest: named cohorts, key findings, any problems
+5. The coordinator merges batch files into `{run_dir}/extracted_cohorts.json`
+6. Returns digest to Opus: "N cohorts extracted, top names: X, Y, Z"
 
-4. Main session merges batch files into `extracted_cohorts.json`
-   (this is a quick `store_query.py` merge, not full file reading)
-5. `complete extract --artifact extracted_cohorts.json`
+This keeps all batch-splitting, ID listing, and merging OUT of the
+Opus main session. Opus sends one message ("run extraction") and
+gets back one digest.
+
+`complete extract --artifact extracted_cohorts.json`
 
 Progress message: "Diving into [X] and [Y] details now..."
 
@@ -275,7 +282,7 @@ or process a script's raw output — stop. Spawn a subagent.
 | Phase | Model | Notes |
 |---|---|---|
 | Search | Haiku | Runs scripts, decides expansion queries |
-| Validate | Sonnet | Edge case classification; batch 30 max |
+| Validate | Sonnet | Single subagent; split only if >150 items |
 | PMID map + fetch | Haiku | Pure script execution |
 | Extract | Sonnet | Batches of 8–10 papers, parallel |
 | Signal | Sonnet | Cross-paper synthesis |
@@ -289,12 +296,53 @@ or process a script's raw output — stop. Spawn a subagent.
 
 Every subagent must:
 1. Write full output to `store/runs/{run_id}/{artifact_name}.json`
-2. Return a 3–5 sentence digest to the main session
+2. Append progress findings to `store/runs/{run_id}/progress.jsonl` as it works
+3. Return a 3–5 sentence digest to the main session
 
 The main session acts on the digest. It never reads the full output.
 
 Never rely on internal tool result cache paths (`.claude/projects/...`).
 They are ephemeral. Only the run folder is the contract.
+
+### Progress reporting from subagents (progress.jsonl)
+
+Every subagent prompt MUST include this instruction:
+
+```
+As you work, append findings to {run_dir}/progress.jsonl — one JSON
+object per line. Write a line when you discover something the user
+would care about. Do NOT wait until you're done.
+
+Format:
+{"ts":"2026-03-31T13:20:00Z","phase":"{phase}","event":"finding","message":"..."}
+{"ts":"2026-03-31T13:25:00Z","phase":"{phase}","event":"progress","message":"..."}
+
+Event types:
+- "finding": a named result with implication (cohort name, AUC, key insight)
+- "progress": batch completion or phase transition
+- "question": something needs user input
+- "error": something failed
+
+To append a line in Python:
+import json, datetime
+with open("{run_dir}/progress.jsonl", "a") as f:
+    f.write(json.dumps({"ts": datetime.datetime.now(datetime.timezone.utc).isoformat(), "phase": "{phase}", "event": "finding", "message": "..."}) + "\n")
+
+FRAMING RULE: Messages must be outcome-focused, not output-focused.
+The user does not care about papers, databases, or pipeline mechanics.
+They care about insights and discoveries related to their question.
+
+Bad: "Validated 60 of 197 papers as relevant"
+Good: "The ether lipid signal in AD converters is replicated across ADNI and ASPREE — strongest proof point so far"
+
+Bad: "Fetching full text for 59 PMC articles"
+Good: "Michigan ALS cohort has AUC 0.94 replicated in two independent cohorts. Checking CSF options next."
+```
+
+The user can watch progress live in a separate terminal:
+```bash
+python3 scripts/progress_watch.py store/runs/{run_id}
+```
 
 ### Opus token budget
 
@@ -308,30 +356,58 @@ from any single operation.
 
 ## Progress updates (mandatory)
 
-Never go silent for more than 60 seconds. The user must be able
-to chat at any time during a run.
+Progress comes from two channels:
 
-**Progress messages must feel like a smart colleague texting you
-while they work.** Not a progress bar. Not internal metrics.
+1. **progress.jsonl** — subagents write findings as they discover them.
+   The user can watch live via `progress_watch.py` (CLI) or the SSE
+   endpoint (webapp). This runs automatically — no Opus involvement.
 
-Good:
-"Already spotting strong leads — ADNI, UK Biobank, and a large
-ALS cohort at Michigan. Narrowing down to the best matches.
-Give me a couple more minutes."
+2. **Main session messages** — Opus sends a message to the user at
+   each phase transition, using the subagent digest. This is the
+   conversational layer.
 
-Bad:
+### Framing rule: outcome-focused, never output-focused
+
+The user does not care about papers, databases, validation counts,
+or pipeline mechanics. They care about insights related to their
+question.
+
+Bad (output-focused):
+"Validated 59 of 197 papers. Fetching full text..."
 "Phase 2 complete. Moving to Phase 3."
 "28 relevant, 52 discarded, 17 tangential."
 
-Rules:
-- Every message names at least one real cohort or finding
-- Every message gives a rough time estimate
-- No message contains only counts or status labels
+Good (outcome-focused):
+"Found longitudinal plasma lipidomics in ADNI (n=1,517) and a
+replicated ALS diagnostic panel at Michigan (AUC 0.94). Checking
+if the evidence holds up across independent cohorts..."
 
-**Early signals (mandatory):** before spawning any subagent for
-a long phase, extract 2–3 named results from the previous digest
-and mention them. This takes 5 seconds and prevents 3 minutes
-of silence.
+"Important negative: pre-diagnostic ALS prediction from blood
+metabolomics has been tried and failed. Your model will need
+NfL or imaging for early ALS detection."
+
+Every message must:
+- Name a cohort, biomarker, or finding
+- Connect it to the user's question
+- If negative, say what it means for their project
+- Never mention papers, PMIDs, databases, or validation counts
+
+### Main session messaging cadence
+
+- After spawning search: "Looking into [indication] cohorts with
+  [sample type]. Give me a few minutes..."
+- After search digest: name 2-3 real cohorts from the digest
+- After validate digest: top finding + any tangential question
+- After extract digest: key proof point or surprising discovery
+- After signal digest: realistic expectation (AUC range, key negative)
+- After rank digest: "Your top options are X, Y, Z. Assembling
+  the full recommendation now."
+
+### Early signals (mandatory)
+
+Before spawning any subagent for a long phase, extract 2–3 named
+results from the previous digest and mention them. This takes 5
+seconds and prevents minutes of silence.
 
 ## Critical rules
 

@@ -105,4 +105,4 @@ callouts (`> `), code blocks, dividers (`---`), tables, toggles
 
 ## Version Controlling with Git.
 
-Never author commits as Claude. Always under kamil seghrouchni, kamil@gmail.com
+Never author commits as Claude. Always under kamil seghrouchni, kamil.seg@gmail.com

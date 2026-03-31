@@ -141,6 +141,10 @@ Write to the run folder:
   "title": "Trajectory of plasma lipidome...",
   "first_author": "Wang T",
   "cohorts_named": ["ADNI"],
+  "diseases": ["AD"],
+  "sample_types": ["plasma"],
+  "has_longitudinal": true,
+  "usable_n": 985,
   "intelligence": [
     {
       "dimension": "real_numbers",
@@ -159,6 +163,15 @@ Write to the run folder:
   ]
 }
 ```
+
+**Structural fields are mandatory on every cohort object.** These
+enable downstream filtering without text search. Derive them from
+the intelligence dimensions you extracted:
+
+- `diseases`: array of disease names (e.g. ["AD"], ["ALS"], ["AD", "ALS"])
+- `sample_types`: array (e.g. ["plasma"], ["CSF", "serum"])
+- `has_longitudinal`: boolean
+- `usable_n`: integer — the N usable for THIS request, not headline N
 
 ## Critical rules
 

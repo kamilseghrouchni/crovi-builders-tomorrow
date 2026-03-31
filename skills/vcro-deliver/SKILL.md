@@ -163,6 +163,37 @@ An FFPE feasibility run would produce completely different axes:
 - `question`: ["feasibility", "providers", "protocol"]
 - `tissue_age`: ["fresh_frozen", "archival_1-5yr", "archival_5-20yr"]
 
+**Resolution types (use ONLY these three):**
+
+Each resolution rule in `endpoint_schema.json` MUST have a `type` field.
+The API server dispatches on this type. Do not invent new types.
+
+1. **`field_match`** — filter cohorts where a top-level structural field matches:
+   ```json
+   { "type": "field_match", "field": "diseases" }
+   ```
+   Server does: `cohorts.filter(c => c[field].includes(value))`
+   Requires the extraction schema to have the field (diseases, sample_types, etc.)
+
+2. **`artifact_redirect`** — change which artifact sections are included:
+   ```json
+   { "type": "artifact_redirect", "values": {
+       "proof_points": { "include": ["signal", "recommendations"] },
+       "sourcing": { "include": ["access", "contacts", "recommendations"] }
+   }}
+   ```
+   Server reads `values[user_value].include` and adjusts response sections.
+
+3. **`text_search`** — fuzzy text search across intelligence facts (fallback):
+   ```json
+   { "type": "text_search", "field": "intelligence" }
+   ```
+   Use only when no structural field exists for this axis.
+
+Resolution rules go ONLY at the top level of endpoint_schema.json
+under `"resolution"`. NOT inside each decision axis. Each key in
+`resolution` matches an axis `param` name.
+
 **Output: `{run_dir}/endpoint_schema.json`:**
 
 ```json
@@ -198,13 +229,17 @@ An FFPE feasibility run would produce completely different axes:
   },
   "resolution": {
     "disease": {
-      "match_type": "text_search_in_intelligence",
-      "note": "Search intelligence facts for disease mentions"
+      "type": "field_match",
+      "field": "diseases",
+      "note": "Filter extracted_cohorts where diseases array contains the value"
     },
     "question": {
-      "proof_points": { "primary_artifact": "signal_summary.json", "include": ["signal", "recommendations"] },
-      "sourcing": { "primary_artifact": "access_summary.json", "include": ["access", "contacts", "recommendations"] },
-      "expectations": { "primary_artifact": "signal_summary.json", "section": "realistic_expectation" }
+      "type": "artifact_redirect",
+      "values": {
+        "proof_points": { "include": ["signal", "recommendations"] },
+        "sourcing": { "include": ["access", "contacts", "recommendations"] },
+        "expectations": { "include": ["signal"] }
+      }
     },
     "sample_type": {
       "match_type": "text_search_in_intelligence",

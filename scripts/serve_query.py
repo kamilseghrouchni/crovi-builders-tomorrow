@@ -133,17 +133,60 @@ def execute_query(params):
 
     # Load cohorts and apply decision-axis filtering
     cohorts = read_json(os.path.join(run_dir, "extracted_cohorts.json")) or []
-    ranking = read_json(os.path.join(run_dir, "ranking.json"))
+    ranking_raw = read_json(os.path.join(run_dir, "ranking.json"))
+    ranking = None
+    if isinstance(ranking_raw, list):
+        ranking = ranking_raw
+    elif isinstance(ranking_raw, dict):
+        ranking = ranking_raw.get("ranked_cohorts", ranking_raw.get("recommendations", []))
 
-    # Apply text-search filtering from decision axes
-    if schema and schema.get("resolution"):
+    # Apply decision-axis filtering using typed resolution rules
+    if schema:
+        top_resolution = schema.get("resolution", {})
+        axis_resolution = {}
+        for ax in schema.get("decision_axes", []):
+            if "resolution" in ax:
+                axis_resolution[ax["param"]] = ax["resolution"]
+
         for axis in schema.get("decision_axes", []):
             value = params.get(axis["param"])
             if not value:
                 continue
-            rule = schema["resolution"].get(axis["param"], {})
 
-            if rule.get("match_type") == "text_search_in_intelligence":
+            # Pick the rule that has actual usable data:
+            # 1. Top-level with type field (new format) — best
+            # 2. Axis-level with value keys (old format) — fallback
+            # 3. Top-level without type (meta-description) — skip
+            top_rule = top_resolution.get(axis["param"], {})
+            axis_rule = axis_resolution.get(axis["param"], {})
+
+            if top_rule.get("type"):
+                rule = top_rule  # new typed format
+            elif axis_rule and value in axis_rule:
+                rule = axis_rule  # old format with actual values
+            elif axis_rule:
+                rule = axis_rule
+            else:
+                rule = top_rule
+            rule_type = rule.get("type", "")
+
+            # Type 1: field_match — filter by structural field on cohort
+            if rule_type == "field_match":
+                field = rule.get("field", "")
+                cohorts = [
+                    c for c in cohorts
+                    if (isinstance(c.get(field), list) and value in c[field])
+                    or c.get(field) == value
+                ]
+
+            # Type 2: artifact_redirect — change which sections to include
+            elif rule_type == "artifact_redirect":
+                redirect = rule.get("values", {}).get(value, {})
+                if redirect.get("include"):
+                    include = redirect["include"]
+
+            # Type 3: text_search — fuzzy search in intelligence facts
+            elif rule_type == "text_search":
                 val_lower = value.lower()
                 cohorts = [
                     c for c in cohorts
@@ -154,18 +197,26 @@ def execute_query(params):
                     )
                 ]
 
-            # question axis: adjust which artifacts to include
-            if axis["param"] == "question" and isinstance(rule.get(value), dict):
-                q_rule = rule[value]
-                if q_rule.get("include"):
-                    include = q_rule["include"]
+            # Legacy fallback: handle old schemas without type field
+            else:
+                value_rule = rule.get(value)
+                if isinstance(value_rule, str) and "PMC" in value_rule:
+                    pmc_ids = re.findall(r"PMC\d+", value_rule)
+                    if pmc_ids:
+                        cohorts = [c for c in cohorts if c.get("id") in pmc_ids]
+                elif isinstance(value_rule, dict) and "cohorts" in value_rule:
+                    cohorts = [c for c in cohorts if c.get("id") in value_rule["cohorts"]]
+                    if value_rule.get("include"):
+                        include = value_rule["include"]
+                elif isinstance(value_rule, dict) and "include" in value_rule:
+                    include = value_rule["include"]
 
-    # Slice
-    if ranking:
-        ranked_ids = [r.get("id") for r in ranking[:top_k]]
-        ranked_cohorts = [c for c in cohorts if c.get("id") in ranked_ids]
-        if ranked_cohorts:
-            cohorts = ranked_cohorts
+    # Apply ranking order to filtered cohorts, then slice
+    if ranking and cohorts:
+        ranked_ids = [r.get("id") for r in ranking]
+        # Sort filtered cohorts by their ranking position
+        id_to_rank = {r.get("id"): i for i, r in enumerate(ranking)}
+        cohorts.sort(key=lambda c: id_to_rank.get(c.get("id"), 9999))
     cohorts = cohorts[:top_k]
 
     # Format
@@ -277,6 +328,59 @@ class Handler(BaseHTTPRequestHandler):
             runs = list_runs(filters)
             self.send_json({"runs": runs})
 
+        elif parsed.path.startswith("/api/runs/") and parsed.path.endswith("/progress"):
+            # GET /api/runs/{run_id}/progress — return progress.jsonl entries
+            parts = parsed.path.split("/")
+            run_id = parts[3] if len(parts) >= 5 else None
+            if not run_id:
+                self.send_json({"error": "run_id required"}, 400)
+                return
+            run_dir = get_run_dir(run_id)
+            if not run_dir:
+                self.send_json({"error": f"Run not found: {run_id}"}, 404)
+                return
+            progress_file = os.path.join(run_dir, "progress.jsonl")
+            entries = []
+            if os.path.exists(progress_file):
+                with open(progress_file) as f:
+                    for line in f:
+                        line = line.strip()
+                        if line:
+                            try:
+                                entries.append(json.loads(line))
+                            except json.JSONDecodeError:
+                                pass
+            # Include run status
+            state = read_json(os.path.join(run_dir, "run_state.json"))
+            self.send_json({
+                "run_id": run_id,
+                "status": derive_status(state) if state else "unknown",
+                "entries": entries,
+                "total": len(entries),
+            })
+
+        elif parsed.path.startswith("/api/runs/") and "/progress" not in parsed.path:
+            # GET /api/runs/{run_id} — return run status + artifact list
+            parts = parsed.path.split("/")
+            run_id = parts[3] if len(parts) >= 4 else None
+            if not run_id:
+                self.send_json({"error": "run_id required"}, 400)
+                return
+            run_dir = get_run_dir(run_id)
+            if not run_dir:
+                self.send_json({"error": f"Run not found: {run_id}"}, 404)
+                return
+            state = read_json(os.path.join(run_dir, "run_state.json"))
+            request = read_json(os.path.join(run_dir, "request.json"))
+            artifacts = [f for f in os.listdir(run_dir) if f.endswith(".json") or f.endswith(".md")]
+            self.send_json({
+                "run_id": run_id,
+                "status": derive_status(state) if state else "unknown",
+                "phases": {p: v["status"] for p, v in state.get("phases", {}).items()} if state else {},
+                "request": request,
+                "artifacts": sorted(artifacts),
+            })
+
         elif parsed.path == "/api/schema":
             run_id = qs.get("run_id", [None])[0] or resolve_latest_run()
             if not run_id:
@@ -303,7 +407,13 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json(schema)
 
         else:
-            self.send_json({"error": "Not found. Available: GET /api/runs, GET /api/schema, POST /api/query"}, 404)
+            self.send_json({"error": "Not found", "available": [
+                "GET  /api/runs",
+                "GET  /api/runs/{run_id}",
+                "GET  /api/runs/{run_id}/progress",
+                "GET  /api/schema?run_id=X",
+                "POST /api/query",
+            ]}, 404)
 
     def do_POST(self):
         parsed = urlparse(self.path)
@@ -348,6 +458,8 @@ def main():
     print(f"Store: {STORE_DIR}")
     print()
     print(f"  GET  http://localhost:{port}/api/runs")
+    print(f"  GET  http://localhost:{port}/api/runs/{{run_id}}")
+    print(f"  GET  http://localhost:{port}/api/runs/{{run_id}}/progress")
     print(f"  GET  http://localhost:{port}/api/schema")
     print(f"  POST http://localhost:{port}/api/query")
     print()

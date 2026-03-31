@@ -20,6 +20,11 @@ venv/
 # macOS
 .DS_Store
 
+# Claude Code local settings (permissions, memory)
+.claude/settings.local.json
+.claude/projects/
+.claude/plans/
+
 # Node (for future Next.js production app)
 node_modules/
 .next/

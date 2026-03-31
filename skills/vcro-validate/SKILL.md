@@ -202,20 +202,21 @@ spawning any extraction subagents.
 
 Sequence: search → validate → (optional user clarification) → extract
 
-## Batch processing (mandatory)
+## Batch processing
 
-NEVER send more than 30 items to a single validation subagent.
-A monolithic validation of 100+ items will silently run for
-15+ minutes and likely time out with zero output.
+A single Sonnet subagent handles all validation items (typically
+50-200). This maintains consistent judgment across edge cases
+and avoids merge/deduplication overhead.
 
-The main session must:
-1. Split results into batches of 30
-2. Spawn one subagent per batch (can run in parallel)
-3. Between batches, read partial results and send a nugget
-4. Compile all batch results into validation_results.json
+Split into parallel batches ONLY if >150 items. The 12-minute
+validation time observed in early runs was caused by orchestration
+delay (Opus processing between phases), not classification speed.
+With fast handoff from search to validate, a single subagent
+classifies 200 items in ~5-8 minutes.
 
-Each batch subagent receives a JSON array of {"id", "title"}
-objects and returns a JSON array of classifications.
+The subagent receives a JSON array of {"id", "title"} objects
+and returns a JSON array of classifications, plus writes
+`validation_results.json` to the run folder.
 
 ## Model allocation
 
