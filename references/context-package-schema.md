@@ -1,0 +1,205 @@
+# vCRO Context Package Schema
+
+The context package is the universal output of a vCRO run. It is
+self-contained: any agent or human can understand it without knowing
+anything about our pipeline.
+
+## Consumers
+
+- **Agent:** calls an endpoint, gets JSON, continues its pipeline
+- **Human:** copies into ChatGPT/Copilot/Cursor for further work
+- **Notion:** rendered as a 360° page
+- **Telegram/email:** rendered as a summary message
+
+Same data, different views.
+
+## Schema
+
+```json
+{
+  "schema_version": "1.0",
+  "run_id": "20260328_cfdna_alzheimer_exploratory",
+  "status": "complete",
+  "created_at": "2026-03-28T20:30:00Z",
+
+  "request": {
+    "original_text": "I am interested in running cfDNA in Alzheimer's...",
+    "indication": "Alzheimer_disease",
+    "modality": "cfDNA",
+    "sample_type": "plasma",
+    "use_case": "exploratory",
+    "n_target": null,
+    "constraints": {
+      "longitudinal": null,
+      "commercial_access": true
+    }
+  },
+
+  "summary": {
+    "one_liner": "cfDNA in AD is an early field. The largest plasma cohort is n=70. ROS-MAP (n=631, serum) is your best option for exploratory work.",
+    "total_screened": 81,
+    "relevant_found": 16,
+    "cohorts_extracted": 14,
+    "top_n": 3
+  },
+
+  "recommendations": [
+    {
+      "rank": 1,
+      "cohort_name": "ROS-MAP",
+      "source_id": "PMC9969834",
+      "n_total": 631,
+      "sample_types": ["serum"],
+      "longitudinal": true,
+      "endpoints": ["dementia risk", "cognitive function", "physical function"],
+      "why": "Largest cfDNA cohort in AD. Longitudinal, well annotated, serum available.",
+      "access": {
+        "status": "portal",
+        "route": "AMP-AD Knowledge Portal (Synapse syn3219045)",
+        "commercial": "unknown, contact RADC separately",
+        "contact": {
+          "name": "Rush Alzheimer's Disease Center",
+          "email": "radc@rush.edu",
+          "role": "data_access"
+        }
+      },
+      "uncertainty": "Serum not plasma. cfDNA yield from serum may differ."
+    }
+  ],
+
+  "signal": {
+    "summary": "Two to three sentences on what the literature shows about this modality for this indication.",
+    "key_findings": [
+      "cfDNA levels elevated in AD vs controls (PMC10643874, n=60)",
+      "5hmC signatures distinguish late-onset AD (PMC12840648)"
+    ],
+    "gaps": [
+      "No large prospective plasma cfDNA study in AD exists",
+      "Most work is cross-sectional, under n=100"
+    ]
+  },
+
+  "exclusion_log": {
+    "total_excluded": 55,
+    "reasons": {
+      "different_indication": 12,
+      "wrong_modality": 18,
+      "review_no_cohort": 8,
+      "mouse_model": 3,
+      "other": 14
+    },
+    "sample": [
+      {"id": "41700260", "reason": "Plasma cell cancer, not AD"},
+      {"id": "41326664", "reason": "Colorectal cancer metastasis"}
+    ]
+  },
+
+  "provenance": {
+    "sources_searched": ["PubMed", "Europe PMC", "ClinicalTrials.gov"],
+    "search_queries": ["Alzheimer cell free DNA plasma cohort", "..."],
+    "papers_screened": 81,
+    "validation_pass_rate": 0.20,
+    "pipeline_version": "vcro-0.3",
+    "run_duration_seconds": 480
+  },
+
+  "available_actions": [
+    {
+      "action": "verify_access",
+      "cohort": "ROS-MAP",
+      "description": "Check DUA terms on Synapse portal",
+      "requires": "web_lookup"
+    },
+    {
+      "action": "contact_pi",
+      "cohort": "ROS-MAP",
+      "contact": {"email": "radc@rush.edu"},
+      "description": "Request sample access for commercial cfDNA study"
+    },
+    {
+      "action": "find_providers",
+      "modality": "cfDNA",
+      "description": "Search for CROs that run cfDNA assays on plasma/serum"
+    }
+  ]
+}
+```
+
+## Field rules
+
+**request:** exact copy of what the user asked plus structured fields.
+Never omit original_text.
+
+**summary.one_liner:** one sentence a human can read and decide whether
+to dig deeper. Must be backed by the data, not inflated.
+
+**recommendations:** top 3 to 5. Only fields that matter for this
+request. Each recommendation has:
+- why: one sentence on why this cohort matches
+- access: what we know and what is unknown
+- uncertainty: one line if something is uncertain
+
+**signal:** what does the literature say about this modality for this
+indication. Not per-paper breakdown. Key findings and gaps.
+
+**exclusion_log:** proves thoroughness. Count by reason category plus
+a sample of 5 to 10 specific exclusions. Not the full list.
+
+**provenance:** how the sausage was made. For trust and reproducibility.
+
+**available_actions:** what the consumer can do next. Each action is
+something the vCRO can execute if asked. This makes the package
+actionable, not just informational.
+
+## Agent endpoint fields
+
+Two additional top-level fields make the context package self-describing
+and queryable:
+
+**`decision_axes`** — run-specific query parameters derived from the
+user's question and what the pipeline found. Generated by vcro-deliver
+Step 8.5.
+
+```json
+{
+  "decision_axes": [
+    {
+      "param": "disease",
+      "type": "string",
+      "values": ["AD", "ALS"],
+      "why": "Evidence and sourcing differ between diseases."
+    }
+  ]
+}
+```
+
+These axes vary per run. An FFPE feasibility run would have
+`metabolite_class` and `tissue_age` instead.
+
+**`endpoint_schema`** — how to query this run programmatically:
+
+```json
+{
+  "endpoint_schema": {
+    "query_url": "POST /api/query",
+    "schema_url": "GET /api/schema?run_id=X",
+    "example_queries": [
+      { "description": "AD proof points", "body": {"disease": "AD", "question": "proof_points"} },
+      { "description": "ALS sourcing", "body": {"disease": "ALS", "question": "sourcing"} }
+    ]
+  }
+}
+```
+
+The full `endpoint_schema.json` (with resolution rules) is a separate
+artifact in the run folder. The context package includes only the
+summary for portability.
+
+## What NOT to include
+
+- Raw search results
+- All 200+ cohorts
+- Full methods_fields.json per paper
+- Score breakdowns or grade calculations
+- Internal file paths or run folder structure
+- Pipeline implementation details
