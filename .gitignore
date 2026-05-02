@@ -47,3 +47,6 @@ test-*.png
 
 # Local dev logs
 /tmp/devserver*.log
+
+# Local data path config (per-machine)
+.data-paths.local
