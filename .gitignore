@@ -50,3 +50,6 @@ test-*.png
 
 # Local data path config (per-machine)
 .data-paths.local
+
+# Seedance generated samples (large; pre-cache or re-run)
+data/seedance-samples/*.mp4

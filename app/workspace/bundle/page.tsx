@@ -5,6 +5,7 @@ import type { ParseResult } from "@/app/api/parse/types";
 import type { QuerySpecimensResult, InstituteEntry } from "@/lib/tools/query_specimens";
 import type { AssayChoice, Bundle, Provider } from "@/lib/bundle";
 import { HandoffModal } from "@/components/Handoff/HandoffModal";
+import { KickoffOverlay } from "@/components/Sponsor/KickoffOverlay";
 
 type StoredCtx = {
   rawQuery: string;
@@ -20,6 +21,7 @@ export default function BundlePage() {
   const [selected, setSelected] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [handoffOpen, setHandoffOpen] = useState(false);
+  const [kickoffOpen, setKickoffOpen] = useState(false);
 
   // Read context dropped by the workspace page on navigation
   useEffect(() => {
@@ -101,7 +103,7 @@ export default function BundlePage() {
         <div className="bp-actions">
           <button
             className="btn-p brand"
-            onClick={() => setHandoffOpen(true)}
+            onClick={() => setKickoffOpen(true)}
             disabled={!canLaunch}
             title={!canLaunch ? "Pick institutes and a provider for each assay" : undefined}
           >
@@ -155,6 +157,27 @@ export default function BundlePage() {
         result={ctx.result}
         bundle={bundle}
       />
+
+      {kickoffOpen && bundle && (() => {
+        const topProvider = bundle.assays.find((a) => a.selected)?.selected ?? null;
+        return (
+          <KickoffOverlay
+            query={ctx.rawQuery}
+            pitch={{
+              provider_name: topProvider?.name ?? null,
+              provider_country: topProvider?.country ?? null,
+              assays: bundle.assays.map((a) => a.assay),
+              n_specimens: bundle.samples.totals.specimens,
+              n_donors: bundle.samples.totals.donors,
+              n_institutes: bundle.samples.totals.institutes,
+            }}
+            onClose={() => {
+              setKickoffOpen(false);
+              setHandoffOpen(true);
+            }}
+          />
+        );
+      })()}
     </div>
   );
 }

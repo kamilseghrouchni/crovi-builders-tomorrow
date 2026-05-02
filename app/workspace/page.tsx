@@ -18,6 +18,7 @@ import { ParsedRequest } from "@/components/Understand/ParsedRequest";
 import { Clarifiers } from "@/components/Understand/Clarifiers";
 import { RunningView } from "@/components/Running/RunningView";
 import { HandoffModal } from "@/components/Handoff/HandoffModal";
+import { SponsorOverlay } from "@/components/Sponsor/SponsorOverlay";
 
 type Step = "parse" | "clarify" | "running" | "results";
 
@@ -40,6 +41,20 @@ export default function WorkspacePage() {
   const [drawerRow, setDrawerRow] = useState<SpecimenRow | null>(null);
   const [handoffOpen, setHandoffOpen] = useState(false);
   const router = useRouter();
+
+  // Sponsor pre-roll: kicked off at search start, shown over results once both ready.
+  type SponsorState = {
+    taskId: string;
+    sponsor: { name: string; country?: string | null; url?: string | null };
+    assay: string;
+    family: string;
+    videoUrl: string | null;
+    error: string | null;
+    startedAt: number;
+  };
+  const [sponsor, setSponsor] = useState<SponsorState | null>(null);
+  const [sponsorShown, setSponsorShown] = useState(false);
+  const [sponsorOverlayOpen, setSponsorOverlayOpen] = useState(false);
 
   // Step 1: read the initial query and parse it
   useEffect(() => {
@@ -94,7 +109,79 @@ export default function WorkspacePage() {
     setRunStartedAt(Date.now());
     setStep("running");
     sendMessage({ text: finalText });
+    // Kick off sponsor video in parallel with the search (silent — never
+    // shown until search completes too). No-op if no assays were detected.
+    void startSponsorVideo(rawQuery, parsed.assays);
   }
+
+  async function startSponsorVideo(query: string, assays: { assay: string; family: string }[]) {
+    if (!assays || assays.length === 0) return;
+    setSponsor(null);
+    setSponsorShown(false);
+    try {
+      const r = await fetch("/api/seedance/start", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ query, assays, duration: 10 }),
+      });
+      const d = await r.json();
+      if (!r.ok || !d.task_id) {
+        return; // silent: ad never appears
+      }
+      setSponsor({
+        taskId: d.task_id,
+        sponsor: d.sponsor,
+        assay: d.assay,
+        family: d.family,
+        videoUrl: null,
+        error: null,
+        startedAt: Date.now(),
+      });
+    } catch {
+      // silent failure
+    }
+  }
+
+  // Poll sponsor task in the background until url lands or 3 minutes pass.
+  useEffect(() => {
+    if (!sponsor || sponsor.videoUrl || sponsor.error) return;
+    let cancelled = false;
+    const tick = async () => {
+      if (cancelled) return;
+      try {
+        const r = await fetch(`/api/seedance/status?task_id=${encodeURIComponent(sponsor.taskId)}`);
+        const d = await r.json();
+        if (cancelled) return;
+        if (d.status === "completed" && d.url) {
+          setSponsor((s) => (s ? { ...s, videoUrl: d.url } : s));
+          return;
+        }
+        if (d.status === "failed" || d.status === "error") {
+          setSponsor((s) => (s ? { ...s, error: d.error ?? "failed" } : s));
+          return;
+        }
+        if (Date.now() - sponsor.startedAt > 180_000) {
+          setSponsor((s) => (s ? { ...s, error: "timeout" } : s));
+          return;
+        }
+        setTimeout(tick, 4000);
+      } catch {
+        // retry until timeout
+        if (!cancelled) setTimeout(tick, 4000);
+      }
+    };
+    tick();
+    return () => { cancelled = true; };
+  }, [sponsor]);
+
+  // Once results are ready and the video is too, pop the overlay.
+  useEffect(() => {
+    if (sponsorShown) return;
+    if (step !== "results") return;
+    if (!sponsor?.videoUrl) return;
+    setSponsorShown(true);
+    setSponsorOverlayOpen(true);
+  }, [step, sponsor, sponsorShown]);
 
   // Reflow when running but no parsed (e.g., direct nav typing in composer post-results)
   if (step === "parse" || (step === "clarify" && !parsed && !parseError)) {
@@ -313,6 +400,16 @@ export default function WorkspacePage() {
         parsed={parsed}
         result={latestQuery}
       />
+
+      {sponsorOverlayOpen && sponsor?.videoUrl && (
+        <SponsorOverlay
+          videoUrl={sponsor.videoUrl}
+          sponsor={sponsor.sponsor}
+          assay={sponsor.assay}
+          skipAvailableAfter={5}
+          onClose={() => setSponsorOverlayOpen(false)}
+        />
+      )}
     </div>
   );
 }
