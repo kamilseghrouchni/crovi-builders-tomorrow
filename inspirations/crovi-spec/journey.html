@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Crovi · User Journey</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lustria&family=IBM+Plex+Sans:wght@300;400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="tokens.css"/>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel" src="shared.jsx"></script>
+<script type="text/babel" src="running.jsx"></script>
+<script type="text/babel" src="outcome.jsx"></script>
+<script type="text/babel" src="phases.jsx"></script>
+<script type="text/babel" src="wireframes-v2.jsx"></script>
+<script type="text/babel" src="marketplace.jsx"></script>
+
+<script type="text/babel" data-presets="react">
+/* ============================================================
+   Crovi · User Journey
+   One vertical flow of every step a user takes, with options
+   stacked vertically where multiple variants exist.
+   ============================================================ */
+
+const App = () => (
+  <DesignCanvas
+    title="Crovi · User Journey"
+    subtitle="Linear flow · each step is a section · options stack vertically when multiple variants exist"
+  >
+    {/* ─────────── STEP 1 · LANDING ─────────── */}
+    <DCSection id="s1-landing" title="STEP 1 · Landing / Query entry"
+      subtitle="The user opens Crovi and describes what they need in plain English.">
+      <DCArtboard id="s1-a" label="A · Chip composer (current)" width={1200} height={780}>
+        <WF_Landing/>
+      </DCArtboard>
+    </DCSection>
+
+    {/* ─────────── STEP 2 · UNDERSTAND ─────────── */}
+    <DCSection id="s2-understand" title="STEP 2 · Understand (phase 0)"
+      subtitle="Agent parses the raw request into structured fields, labels each with its trust level.">
+      <DCArtboard id="s2-a" label="A · Raw + parsed fields split" width={1400} height={820}>
+        <Phase_Understand/>
+      </DCArtboard>
+    </DCSection>
+
+    {/* ─────────── STEP 3 · CRAFT ─────────── */}
+    <DCSection id="s3-craft" title="STEP 3 · Craft query plan (phase 0b)"
+      subtitle="Agent builds a multi-angle plan — 7 angles across PubMed, ClinicalTrials, web, snowball.">
+      <DCArtboard id="s3-a" label="A · 7-angle query plan grid" width={1400} height={820}>
+        <Phase_Craft/>
+      </DCArtboard>
+    </DCSection>
+
+    {/* ─────────── STEP 4 · DISCOVER ─────────── */}
+    <DCSection id="s4-discover" title="STEP 4 · Discover (phase 1)"
+      subtitle="Breadth search · running queries across 4 sources, streaming hits as they arrive.">
+      <DCArtboard id="s4-a" label="A · Sources panel + live query stream" width={1400} height={820}>
+        <Phase_Discover/>
+      </DCArtboard>
+    </DCSection>
+
+    {/* ─────────── STEP 5 · TRIAGE ─────────── */}
+    <DCSection id="s5-triage" title="STEP 5 · Triage (phase 2)"
+      subtitle="Filter the raw catch down to relevant papers. Show kept + rejected reasons side by side.">
+      <DCArtboard id="s5-a" label="A · Kept list ↔ rejection buckets" width={1400} height={820}>
+        <Phase_Triage/>
+      </DCArtboard>
+    </DCSection>
+
+    {/* ─────────── STEP 6 · RUNNING / DEPTH (3 OPTIONS) ─────────── */}
+    <DCSection id="s6-running" title="STEP 6 · Running · Depth extraction (phase 3)"
+      subtitle="Live mid-run view · 3 layout options to pick from — frozen at Pass 3 of 11.">
+      <DCArtboard id="s6-a" label="Option A · Stepper + event feed + scoreboard" width={1400} height={820}>
+        <RunningA/>
+      </DCArtboard>
+      <DCArtboard id="s6-b" label="Option B · Vertical phase timeline + depth grid" width={1400} height={820}>
+        <RunningB/>
+      </DCArtboard>
+      <DCArtboard id="s6-c" label="Option C · Single calm log, phases as sections" width={1200} height={820}>
+        <RunningC/>
+      </DCArtboard>
+    </DCSection>
+
+    {/* ─────────── STEP 7 · AGGREGATE ─────────── */}
+    <DCSection id="s7-aggregate" title="STEP 7 · Aggregate (phase 4)"
+      subtitle="Paper-level facts collapse into 7 institutional dossiers, each scored on 4 pillars.">
+      <DCArtboard id="s7-a" label="A · 7 institution cards with pillar bars" width={1400} height={820}>
+        <Phase_Aggregate/>
+      </DCArtboard>
+    </DCSection>
+
+    {/* ─────────── STEP 8 · ENRICH ─────────── */}
+    <DCSection id="s8-enrich" title="STEP 8 · Enrich (phase 4d)"
+      subtitle="Targeted gap-closing queries — fill specific holes per institution.">
+      <DCArtboard id="s8-a" label="A · Gap-closing query table" width={1400} height={820}>
+        <Phase_Enrich/>
+      </DCArtboard>
+    </DCSection>
+
+    {/* ─────────── STEP 9 · HYPOTHESIZE ─────────── */}
+    <DCSection id="s9-hypothesize" title="STEP 9 · Hypothesize (phase 5a)"
+      subtitle="Agent generates testable claims from aggregated evidence, ranked by confidence.">
+      <DCArtboard id="s9-a" label="A · Hypotheses grid, grouped by institution" width={1400} height={820}>
+        <Phase_Hypothesize/>
+      </DCArtboard>
+    </DCSection>
+
+    {/* ─────────── STEP 10 · VERIFY ─────────── */}
+    <DCSection id="s10-verify" title="STEP 10 · Verify (phase 5b)"
+      subtitle="Each hypothesis gets checked · confirmed / refuted / open.">
+      <DCArtboard id="s10-a" label="A · Scoreboard + check list" width={1400} height={820}>
+        <Phase_Verify/>
+      </DCArtboard>
+    </DCSection>
+
+    {/* ─────────── STEP 11 · EVALUATE ─────────── */}
+    <DCSection id="s11-evaluate" title="STEP 11 · Evaluate (phase 5c)"
+      subtitle="Final readiness grades — who's ready to pursue vs. re-enrich.">
+      <DCArtboard id="s11-a" label="A · Ranked readiness grades" width={1400} height={820}>
+        <Phase_Evaluate/>
+      </DCArtboard>
+    </DCSection>
+
+    {/* ─────────── STEP 12 · DELIVER ─────────── */}
+    <DCSection id="s12-deliver" title="STEP 12 · Deliver (phase 7)"
+      subtitle="Final package assembly · dossiers, hypothesis ledger, open questions, RFQ drafts.">
+      <DCArtboard id="s12-a" label="A · Package items + run summary" width={1400} height={820}>
+        <Phase_Deliver/>
+      </DCArtboard>
+    </DCSection>
+
+    {/* ─────────── STEP 13 · MARKETPLACE (2 OPTIONS) ─────────── */}
+    <DCSection id="s13-marketplace" title="STEP 13 · Marketplace"
+      subtitle="The delivered run opens as a marketplace of biospecimen opportunities across sites. 2 view modes — tiles per site, or table with all features. Clicking any row jumps to the dossier (Step 14).">
+      <DCArtboard id="s13-a" label="A · Tiles — one card per opportunity / site" width={1400} height={960}>
+        <MarketplaceTiles/>
+      </DCArtboard>
+      <DCArtboard id="s13-b" label="B · Table — all opportunities, full feature columns" width={1400} height={820}>
+        <MarketplaceTable/>
+      </DCArtboard>
+    </DCSection>
+
+    {/* ─────────── STEP 14 · DOSSIER (2 OPTIONS) ─────────── */}
+    <DCSection id="s14-dossier" title="STEP 14 · Opportunity dossier"
+      subtitle="After clicking a tile or row, the user lands on the full dossier for that opportunity / institution. 2 options — simplified list + detail vs hero dossier.">
+      <DCArtboard id="s14-a" label="Option A · Simplified list + institution dossier" width={1400} height={900}>
+        <OutcomeSimplified/>
+      </DCArtboard>
+      <DCArtboard id="s14-b" label="Option B · Single-institution hero dossier" width={1200} height={820}>
+        <WF_Expanded/>
+      </DCArtboard>
+    </DCSection>
+
+  </DesignCanvas>
+);
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>

@@ -4,10 +4,18 @@ store/sources/
 store/cohorts/
 store/index/
 
+# Specimen DB (2GB) + derived views
+data/specimens.db
+data/specimens.db-shm
+data/specimens.db-wal
+data/enriched/views.db
+
 # Secrets
 .notion-token
 .openai-key
 .env
+.env.*
+!.env.example
 *.env
 
 # Python
@@ -25,7 +33,17 @@ venv/
 .claude/projects/
 .claude/plans/
 
-# Node (for future Next.js production app)
+# Node / Next.js
 node_modules/
 .next/
 .vercel/
+*.tsbuildinfo
+next-env.d.ts
+.backups/
+
+# Local browser-automation cache
+.playwright-mcp/
+test-*.png
+
+# Local dev logs
+/tmp/devserver*.log

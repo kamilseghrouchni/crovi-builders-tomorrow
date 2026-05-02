@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Crovi · Spec Flow</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lustria&family=IBM+Plex+Sans:wght@300;400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="tokens.css"/>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel" src="shared.jsx"></script>
+<script type="text/babel" src="running.jsx"></script>
+<script type="text/babel" src="outcome.jsx"></script>
+<script type="text/babel" src="phases.jsx"></script>
+
+<script type="text/babel" data-presets="react">
+const App = () => (
+  <DesignCanvas
+    title="Crovi · Agent Flow — 11-Phase Spec"
+    subtitle="Wireframes grounded in the engineering spec · RUN-0438 mock case: AD CSF × WGBS"
+  >
+    <DCSection id="running" title="Running · layout variants (frozen at Pass 3 · depth)">
+      <DCArtboard id="running-a" label="A · Stepper + feed + scoreboard (primary)" width={1400} height={820}>
+        <RunningA/>
+      </DCArtboard>
+      <DCArtboard id="running-b" label="B · Vertical timeline + depth grid" width={1400} height={820}>
+        <RunningB/>
+      </DCArtboard>
+      <DCArtboard id="running-c" label="C · Single calm log, phases as sections" width={1200} height={820}>
+        <RunningC/>
+      </DCArtboard>
+    </DCSection>
+
+    <DCSection id="outcome" title="Outcome · simplified list + detail (replaces Expanded)">
+      <DCArtboard id="outcome-simple" label="Outcome · ranked list + institution dossier" width={1400} height={900}>
+        <OutcomeSimplified/>
+      </DCArtboard>
+    </DCSection>
+
+    <DCSection id="phases" title="Phase-detail screens · what the agent shows inside each of the 11 phases">
+      <DCArtboard id="p-understand"   label="0 · Understand"   width={1400} height={820}><Phase_Understand/></DCArtboard>
+      <DCArtboard id="p-craft"        label="0b · Craft"        width={1400} height={820}><Phase_Craft/></DCArtboard>
+      <DCArtboard id="p-discover"     label="1 · Discover"     width={1400} height={820}><Phase_Discover/></DCArtboard>
+      <DCArtboard id="p-triage"       label="2 · Triage"       width={1400} height={820}><Phase_Triage/></DCArtboard>
+      <DCArtboard id="p-depth"        label="3 · Depth (→ RunningA is the depth view)" width={1400} height={820}><RunningA/></DCArtboard>
+      <DCArtboard id="p-aggregate"    label="4 · Aggregate"    width={1400} height={820}><Phase_Aggregate/></DCArtboard>
+      <DCArtboard id="p-enrich"       label="4d · Enrich"      width={1400} height={820}><Phase_Enrich/></DCArtboard>
+      <DCArtboard id="p-hypothesize"  label="5a · Hypothesize" width={1400} height={820}><Phase_Hypothesize/></DCArtboard>
+      <DCArtboard id="p-verify"       label="5b · Verify"      width={1400} height={820}><Phase_Verify/></DCArtboard>
+      <DCArtboard id="p-evaluate"     label="5c · Evaluate"    width={1400} height={820}><Phase_Evaluate/></DCArtboard>
+      <DCArtboard id="p-deliver"      label="7 · Deliver"      width={1400} height={820}><Phase_Deliver/></DCArtboard>
+    </DCSection>
+  </DesignCanvas>
+);
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>
